@@ -25,6 +25,7 @@ from app.models.schemas import (
 )
 from app.services.explainer import build_explanation
 from app.services.knowledge_base import get_knowledge_base
+from app.services.llm import answer_service_status
 from app.services.ocr import ocr_service
 from app.services.storage import list_saved_questions, save_question
 
@@ -56,6 +57,11 @@ def health() -> dict[str, str]:
 @app.get("/api/ocr/status")
 def get_ocr_status():
     return ocr_service.status()
+
+
+@app.get("/api/answer/status")
+def get_answer_status():
+    return answer_service_status()
 
 
 @app.post("/api/upload", response_model=UploadResponse)
