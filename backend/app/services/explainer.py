@@ -8,6 +8,12 @@ from app.models.schemas import (
     TextbookBasis,
 )
 from app.services.knowledge_base import get_knowledge_base
+from app.services.llm import (
+    LLMGenerationError,
+    LLMNotConfiguredError,
+    build_llm_explanation,
+    get_answer_mode,
+)
 
 
 def _option_display(label: str, text: str) -> str:
@@ -172,11 +178,39 @@ def _score_to_confidence(score: float, margin: float, negative_question: bool) -
 
 
 def build_explanation(request: ExplainRequest) -> ExplanationResponse:
+    mode = get_answer_mode()
     kb = get_knowledge_base()
     passages = kb.search(request.question, top_k=request.top_k)
     if not passages:
+        if mode in {"hybrid", "llm"}:
+            try:
+                return build_llm_explanation(request, [], None)
+            except (LLMGenerationError, LLMNotConfiguredError) as exc:
+                raise ValueError(str(exc)) from exc
         raise ValueError("本地教材知识库未检索到相关章节，请补充教材 JSON 或调整题干。")
 
+    local_response = _build_local_explanation(request, passages)
+    if mode == "local":
+        return local_response
+
+    try:
+        return build_llm_explanation(request, passages, local_response)
+    except (LLMGenerationError, LLMNotConfiguredError) as exc:
+        if mode == "llm":
+            raise ValueError(str(exc)) from exc
+        return local_response.model_copy(
+            update={
+                "why_correct": (
+                    "AI 生成暂不可用，已返回本地教材规则讲解；"
+                    f"原因：{exc} "
+                    f"{local_response.why_correct}"
+                ),
+                "answer_source": "local-fallback",
+            }
+        )
+
+
+def _build_local_explanation(request: ExplainRequest, passages: list[Passage]) -> ExplanationResponse:
     primary = passages[0]
     example = _find_example_answer(request.question, primary)
     answer, selected_label, confidence = _choose_option(request, primary, example)
@@ -209,6 +243,7 @@ def build_explanation(request: ExplainRequest) -> ExplanationResponse:
         mnemonic=mnemonic,
         archive_chapter=primary.archive_chapter,
         related_key_points=primary.key_points,
+        answer_source="local",
     )
 
 
