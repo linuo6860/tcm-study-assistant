@@ -31,6 +31,7 @@ export default function UploadPage({ onExplained }) {
   const [file, setFile] = useState(null);
   const [preview, setPreview] = useState("");
   const [ocrText, setOcrText] = useState("");
+  const [ocrEngine, setOcrEngine] = useState("");
   const [warning, setWarning] = useState("");
   const [status, setStatus] = useState("等待上传题目截图");
   const [loading, setLoading] = useState(false);
@@ -39,6 +40,7 @@ export default function UploadPage({ onExplained }) {
     const nextFile = event.target.files?.[0];
     setFile(nextFile || null);
     setOcrText("");
+    setOcrEngine("");
     setWarning("");
     setStatus(nextFile ? "已选择图片，可以开始 OCR" : "等待上传题目截图");
     setPreview(nextFile ? URL.createObjectURL(nextFile) : "");
@@ -56,8 +58,9 @@ export default function UploadPage({ onExplained }) {
       const uploaded = await uploadImage(file);
       const result = await runOcr(uploaded.upload_id);
       setOcrText(result.text);
+      setOcrEngine(result.engine || "");
       setWarning(result.warning || "");
-      setStatus("OCR 完成，请校对题干和选项后生成讲解");
+      setStatus(result.warning ? "OCR 返回了校对文本，请检查识别环境" : "真实 OCR 完成，请校对题干和选项后生成讲解");
     } catch (error) {
       setStatus(error.message);
     } finally {
@@ -102,12 +105,25 @@ export default function UploadPage({ onExplained }) {
           )}
         </label>
 
+        <div className="upload-actions">
+          <label className="secondary-button">
+            手机拍照
+            <input type="file" accept="image/*" capture="environment" onChange={handleFileChange} />
+          </label>
+          <label className="secondary-button">
+            相册选择
+            <input type="file" accept="image/*" onChange={handleFileChange} />
+          </label>
+        </div>
+
         <button className="primary-button" onClick={handleOcr} disabled={loading}>
-          {loading ? "处理中..." : "上传并 OCR"}
+          {loading ? "处理中..." : "上传并真实 OCR"}
         </button>
 
         <p className="status-text">{status}</p>
+        {ocrEngine && <p className="status-text">OCR 引擎：{ocrEngine}</p>}
         {warning && <p className="warning-text">{warning}</p>}
+        <p className="hint-text">手机建议竖屏拍题目，保持四边完整、文字清晰，拍完后仍可在右侧手动校正。</p>
       </div>
 
       <div className="panel">
@@ -127,4 +143,3 @@ export default function UploadPage({ onExplained }) {
     </section>
   );
 }
-

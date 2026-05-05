@@ -14,4 +14,11 @@ services:
         value: /tmp/tcm-study-assistant
       - key: TCM_UPLOAD_DIR
         value: /tmp/tcm-study-assistant/uploads
-
+      - key: PYTHON_VERSION
+        value: 3.11.11
+      - key: OCR_DEVICE
+        value: cpu
+      - key: OCR_MAX_IMAGE_SIDE
+        value: "1600"
+      - key: OCR_CPU_THREADS
+        value: "2"

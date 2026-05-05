@@ -196,7 +196,8 @@ textarea {
 }
 
 .primary-button,
-.accent-button {
+.accent-button,
+.secondary-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -217,6 +218,25 @@ textarea {
   background: linear-gradient(135deg, var(--cinnabar), #bd6b2b);
 }
 
+.upload-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.secondary-button {
+  margin-top: 0;
+  border: 1px solid rgba(47, 111, 94, 0.26);
+  color: var(--jade);
+  background: rgba(255, 253, 247, 0.72);
+  font-weight: 900;
+}
+
+.secondary-button input {
+  display: none;
+}
+
 .primary-button:disabled,
 .accent-button:disabled {
   cursor: wait;
@@ -224,13 +244,18 @@ textarea {
 }
 
 .status-text,
-.warning-text {
+.warning-text,
+.hint-text {
   margin: 14px 0 0;
   color: var(--muted);
 }
 
 .warning-text {
   color: var(--cinnabar-dark);
+}
+
+.hint-text {
+  font-size: 0.94rem;
 }
 
 .result-toolbar {
@@ -361,4 +386,3 @@ blockquote span {
     padding: 20px;
   }
 }
-
