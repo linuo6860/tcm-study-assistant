@@ -1,5 +1,7 @@
 import re
 import shutil
+import os
+from threading import Thread
 import uuid
 from pathlib import Path
 
@@ -42,11 +44,18 @@ app.add_middleware(
 def on_startup() -> None:
     init_db()
     get_knowledge_base()
+    if os.getenv("OCR_BACKGROUND_WARMUP", "true").lower() not in {"0", "false", "no"}:
+        Thread(target=ocr_service.warmup, daemon=True).start()
 
 
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok", "app": settings.app_name}
+
+
+@app.get("/api/ocr/status")
+def get_ocr_status():
+    return ocr_service.status()
 
 
 @app.post("/api/upload", response_model=UploadResponse)
@@ -145,4 +154,3 @@ def split_question_and_options(text: str) -> tuple[str, list[Option]]:
             question_lines.append(line)
 
     return "\n".join(question_lines) or text, options
-

@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+from threading import Lock
 
 from PIL import Image, ImageOps
 
@@ -9,7 +10,9 @@ from app.models.schemas import OCRBlock, OCRResponse
 class PaddleOCRService:
     def __init__(self) -> None:
         self._engine = None
+        self._engine_lock = Lock()
         self._load_error: str | None = None
+        self._warming = False
 
     def _get_engine(self):
         if self._engine is not None:
@@ -17,14 +20,36 @@ class PaddleOCRService:
         if self._load_error:
             return None
 
-        try:
-            from paddleocr import PaddleOCR
+        with self._engine_lock:
+            if self._engine is not None:
+                return self._engine
+            if self._load_error:
+                return None
 
-            self._engine = self._build_engine(PaddleOCR)
-            return self._engine
-        except Exception as exc:  # PaddleOCR is optional during early development.
-            self._load_error = str(exc)
-            return None
+            try:
+                os.environ.setdefault("DISABLE_MODEL_SOURCE_CHECK", "True")
+                from paddleocr import PaddleOCR
+
+                self._engine = self._build_engine(PaddleOCR)
+                return self._engine
+            except Exception as exc:  # PaddleOCR is optional during early development.
+                self._load_error = str(exc)
+                return None
+
+    def warmup(self) -> None:
+        self._warming = True
+        try:
+            self._get_engine()
+        finally:
+            self._warming = False
+
+    def status(self) -> dict[str, str | bool | None]:
+        return {
+            "engine": "paddleocr" if self._engine is not None else "paddleocr-fallback",
+            "ready": self._engine is not None,
+            "warming": self._warming,
+            "load_error": self._load_error,
+        }
 
     def _build_engine(self, paddle_ocr_class):
         device = os.getenv("OCR_DEVICE", "cpu")

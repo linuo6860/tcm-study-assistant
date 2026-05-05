@@ -22,3 +22,7 @@ services:
         value: "1600"
       - key: OCR_CPU_THREADS
         value: "2"
+      - key: OCR_BACKGROUND_WARMUP
+        value: "true"
+      - key: DISABLE_MODEL_SOURCE_CHECK
+        value: "True"
