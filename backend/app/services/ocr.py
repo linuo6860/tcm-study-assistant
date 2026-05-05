@@ -1,7 +1,10 @@
+import base64
 import os
+import time
 from pathlib import Path
 from threading import Lock
 
+import requests
 from PIL import Image, ImageOps
 
 from app.models.schemas import OCRBlock, OCRResponse
@@ -13,6 +16,8 @@ class PaddleOCRService:
         self._engine_lock = Lock()
         self._load_error: str | None = None
         self._warming = False
+        self._baidu_token: str | None = None
+        self._baidu_token_expires_at = 0.0
 
     def _get_engine(self):
         if self._engine is not None:
@@ -37,6 +42,9 @@ class PaddleOCRService:
                 return None
 
     def warmup(self) -> None:
+        if self._provider() == "baidu":
+            return
+
         self._warming = True
         try:
             self._get_engine()
@@ -44,12 +52,24 @@ class PaddleOCRService:
             self._warming = False
 
     def status(self) -> dict[str, str | bool | None]:
+        if self._provider() == "baidu":
+            configured = bool(os.getenv("BAIDU_OCR_API_KEY") and os.getenv("BAIDU_OCR_SECRET_KEY"))
+            return {
+                "engine": "baidu-ocr",
+                "ready": configured,
+                "warming": False,
+                "load_error": None if configured else "缺少 BAIDU_OCR_API_KEY 或 BAIDU_OCR_SECRET_KEY",
+            }
+
         return {
             "engine": "paddleocr" if self._engine is not None else "paddleocr-fallback",
             "ready": self._engine is not None,
             "warming": self._warming,
             "load_error": self._load_error,
         }
+
+    def _provider(self) -> str:
+        return os.getenv("OCR_PROVIDER", "paddle").strip().lower()
 
     def _build_engine(self, paddle_ocr_class):
         device = os.getenv("OCR_DEVICE", "cpu")
@@ -92,6 +112,9 @@ class PaddleOCRService:
         raise RuntimeError("; ".join(errors) or "PaddleOCR 初始化失败")
 
     def recognize(self, upload_id: str, image_path: Path) -> OCRResponse:
+        if self._provider() == "baidu":
+            return self._recognize_with_baidu(upload_id, image_path)
+
         engine = self._get_engine()
         if engine is None:
             fallback = (
@@ -123,6 +146,93 @@ class PaddleOCRService:
             blocks=blocks,
             engine="paddleocr",
         )
+
+    def _recognize_with_baidu(self, upload_id: str, image_path: Path) -> OCRResponse:
+        try:
+            prepared_path = self._prepare_image(image_path)
+            token = self._get_baidu_access_token()
+            endpoint = os.getenv("BAIDU_OCR_ENDPOINT", "general_basic")
+            timeout = int(os.getenv("BAIDU_OCR_TIMEOUT", "90"))
+            url = f"https://aip.baidubce.com/rest/2.0/ocr/v1/{endpoint}"
+
+            image_base64 = base64.b64encode(prepared_path.read_bytes()).decode("utf-8")
+            response = requests.post(
+                url,
+                params={"access_token": token},
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+                data={
+                    "image": image_base64,
+                    "language_type": "CHN_ENG",
+                    "detect_direction": "true",
+                    "paragraph": "false",
+                },
+                timeout=(10, timeout),
+            )
+            response.raise_for_status()
+            payload = response.json()
+            if "error_code" in payload:
+                raise RuntimeError(f"{payload.get('error_code')}: {payload.get('error_msg')}")
+
+            blocks: list[OCRBlock] = []
+            lines: list[str] = []
+            for item in payload.get("words_result", []) or []:
+                text = str(item.get("words", "")).strip()
+                if not text:
+                    continue
+                location = item.get("location")
+                box = [location] if location else None
+                blocks.append(OCRBlock(text=text, confidence=None, box=box))
+                lines.append(text)
+
+            return OCRResponse(
+                upload_id=upload_id,
+                text="\n".join(lines),
+                blocks=blocks,
+                engine="baidu-ocr",
+            )
+        except Exception as exc:
+            fallback = "OCR 服务暂时不可用，请在这里粘贴或校正题干与选项。"
+            return OCRResponse(
+                upload_id=upload_id,
+                text=fallback,
+                blocks=[OCRBlock(text=fallback, confidence=None, box=None)],
+                engine="baidu-ocr-fallback",
+                warning=f"百度 OCR 调用失败：{exc}",
+            )
+
+    def _get_baidu_access_token(self) -> str:
+        api_key = os.getenv("BAIDU_OCR_API_KEY")
+        secret_key = os.getenv("BAIDU_OCR_SECRET_KEY")
+        if not api_key or not secret_key:
+            raise RuntimeError("缺少 BAIDU_OCR_API_KEY 或 BAIDU_OCR_SECRET_KEY")
+
+        now = time.time()
+        if self._baidu_token and now < self._baidu_token_expires_at:
+            return self._baidu_token
+
+        with self._engine_lock:
+            now = time.time()
+            if self._baidu_token and now < self._baidu_token_expires_at:
+                return self._baidu_token
+
+            response = requests.post(
+                "https://aip.baidubce.com/oauth/2.0/token",
+                params={
+                    "grant_type": "client_credentials",
+                    "client_id": api_key,
+                    "client_secret": secret_key,
+                },
+                timeout=(10, 30),
+            )
+            response.raise_for_status()
+            payload = response.json()
+            if "access_token" not in payload:
+                raise RuntimeError(payload.get("error_description") or payload.get("error") or "获取 access_token 失败")
+
+            self._baidu_token = str(payload["access_token"])
+            expires_in = int(payload.get("expires_in", 2592000))
+            self._baidu_token_expires_at = time.time() + max(expires_in - 300, 60)
+            return self._baidu_token
 
     def _prepare_image(self, image_path: Path) -> Path:
         max_side = int(os.getenv("OCR_MAX_IMAGE_SIDE", "1600"))

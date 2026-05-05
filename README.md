@@ -67,7 +67,7 @@ uvicorn app.main:app --reload --port 8000
 http://127.0.0.1:8000/docs
 ```
 
-> `requirements-lite.txt` 用于本地轻量开发；`requirements.txt` 会安装 PaddlePaddle + PaddleOCR，用于真实 OCR。首次真实 OCR 会下载模型，启动和第一次识别都会慢一些。
+> `requirements.txt` 默认使用轻量云端依赖，适合 Render 免费实例；如需本地 PaddleOCR，可安装 `requirements-ocr.txt`。
 
 ## 前端启动
 
@@ -147,9 +147,10 @@ CORS_ORIGINS=https://linuo6860.github.io
 TCM_STORAGE_DIR=/tmp/tcm-study-assistant
 TCM_UPLOAD_DIR=/tmp/tcm-study-assistant/uploads
 PYTHON_VERSION=3.11.11
-OCR_DEVICE=cpu
-OCR_MAX_IMAGE_SIDE=1600
-OCR_CPU_THREADS=2
+OCR_PROVIDER=baidu
+BAIDU_OCR_API_KEY=你的百度 OCR API Key
+BAIDU_OCR_SECRET_KEY=你的百度 OCR Secret Key
+BAIDU_OCR_ENDPOINT=general_basic
 ```
 
 部署成功后，Render 会给你一个类似下面的后端地址：
@@ -178,6 +179,11 @@ https://linuo6860.github.io/tcm-study-assistant/
 
 ### 3. 关于云端 PaddleOCR
 
-当前后端默认安装 PaddlePaddle + PaddleOCR，并使用 PP-OCRv5 mobile 模型做中文 OCR。Render 免费实例资源有限，首次构建、首次启动、首次识别都会比较慢；如果出现内存不足或部署超时，建议改用付费实例、Docker 镜像或云 OCR API。
+Render 免费实例内存不足以稳定运行 PaddleOCR。云端默认使用百度 OCR API，后端只负责转发图片和解析返回文本，内存占用更低。
 
-PaddleOCR 官方安装流程要求先安装 PaddlePaddle，再安装 `paddleocr`。Render 新建 Python 服务目前默认版本可能较新，因此项目用 `.python-version` 和 `PYTHON_VERSION=3.11.11` 固定到更稳的 Python 3.11。
+如果你要在本地电脑继续使用 PaddleOCR，可执行：
+
+```bash
+pip install -r backend/requirements-ocr.txt
+OCR_PROVIDER=paddle uvicorn app.main:app --reload --port 8000
+```

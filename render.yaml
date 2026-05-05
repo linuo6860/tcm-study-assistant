@@ -16,6 +16,12 @@ services:
         value: /tmp/tcm-study-assistant/uploads
       - key: PYTHON_VERSION
         value: 3.11.11
+      - key: OCR_PROVIDER
+        value: baidu
+      - key: BAIDU_OCR_ENDPOINT
+        value: general_basic
+      - key: BAIDU_OCR_TIMEOUT
+        value: "90"
       - key: OCR_DEVICE
         value: cpu
       - key: OCR_MAX_IMAGE_SIDE
