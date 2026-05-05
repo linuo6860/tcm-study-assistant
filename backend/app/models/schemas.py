@@ -89,6 +89,7 @@ class ExplanationResponse(BaseModel):
     mnemonic: str
     archive_chapter: ArchiveChapter
     related_key_points: list[str] = []
+    answer_source: str = "local"
 
 
 class SaveQuestionRequest(BaseModel):
