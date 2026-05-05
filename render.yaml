@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: tcm-study-assistant-api
+    env: python
+    rootDir: backend
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: CORS_ORIGINS
+        value: http://localhost:5173,http://127.0.0.1:5173,https://linuo6860.github.io
+      - key: TCM_STORAGE_DIR
+        value: /tmp/tcm-study-assistant
+      - key: TCM_UPLOAD_DIR
+        value: /tmp/tcm-study-assistant/uploads
+
